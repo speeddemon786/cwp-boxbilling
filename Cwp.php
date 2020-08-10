@@ -4,7 +4,7 @@
 // This source file is subject to the license that is bundled
 // with this package in the file LICENSE.txt
 // Created by Grant Bamford https://www.speeddemon.co.za/
-// Version 0.8 (6/8/2020)    
+// Version 1.0 (8/8/2020)   
 
 class Server_Manager_Cwp extends Server_Manager
 {
@@ -14,7 +14,7 @@ class Server_Manager_Cwp extends Server_Manager
             throw new Server_Exception('cURL extension is not enabled');
         }
         
-        $this->_config['version'] = '0.8';
+        $this->_config['version'] = '1.0';
 	}
 
     public static function getForm()
@@ -44,8 +44,12 @@ class Server_Manager_Cwp extends Server_Manager
 		$host = 'http';
 		if ($this->_config['secure']) {
 			$host .= 's';
-		}
-        $host .= '://' . $this->_config['host'] . ':' . $this->_config['port'] . '/v1/' . $endpoint;
+        }
+        $port = '2304';
+        if ($this->_config['port']){
+            $port = $this->_config['port'];
+        }
+        $host .= '://' . $this->_config['host'] . ':' . $port . '/v1/' . $endpoint;
     	$ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $host);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -61,7 +65,13 @@ class Server_Manager_Cwp extends Server_Manager
         if (preg_match("/OK/i", $response)) {
             $result = true;
         } else {
-            throw new Server_Exception('Data Sent : ' . print_r($data,1) . ', Response Received : ' . print_r($response,1) . ' From Endpoint : ' . $host);
+            $json = json_decode($response);
+            if ($json === null && json_last_error() !== JSON_ERROR_NONE) {
+                throw new Server_Exception('The server sent back an invalid response');
+            }else{
+                $message = $json->msj;
+                throw new Server_Exception($message);
+            }
         }
         return $result;
     }
@@ -91,13 +101,14 @@ class Server_Manager_Cwp extends Server_Manager
         } else {
             $this->getLog()->info('Creating shared hosting account');
             $p = $a->getPackage();
+            $c = $a->getClient();
             $data = array(
                 'key' => $this->_config['accesshash'],
                 'action' => 'add', 
                 'domain' => $a->getDomain(),
                 'user' => $a->getUsername(),
                 'pass' => $a->getPassword(),
-                'email' => $a->getEmail(), // Seems to be a periodic problem here.
+                'email' => $c->getEmail(),
                 'package' => $p->getCustomValue('packageid'),
                 'inode' => $p->getCustomValue('inode'),
                 'limit_nproc' => $p->getCustomValue('limit_nproc'),
@@ -151,7 +162,8 @@ class Server_Manager_Cwp extends Server_Manager
             $this->getLog()->info('Cancelling reseller hosting account');
         } else {
             $this->getLog()->info('Cancelling shared hosting account');
-            $data = array('key' => $this->_config['accesshash'], 'action' => 'del', 'user' => $a->getUsername(), 'email' => $a->getEmail());
+            $c = $a->getClient();
+            $data = array('key' => $this->_config['accesshash'], 'action' => 'del', 'user' => $a->getUsername(), 'email' => $c->getEmail());
             $endpoint = 'account';
             $result = $this->_makeRequest($data, $endpoint);
             if (isset($result['return']) && $result['return'] == true) {
@@ -167,6 +179,7 @@ class Server_Manager_Cwp extends Server_Manager
             $this->getLog()->info('Updating reseller hosting account');
         } else {
             $this->getLog()->info('Updating shared hosting account');
+            $c = $a->getClient();
             $p = $a->getPackage();
             $data = array(
                 'key' => $this->_config['accesshash'], 
@@ -174,7 +187,7 @@ class Server_Manager_Cwp extends Server_Manager
                 'domain' => $a->getDomain(), 
                 'user' => $a->getUsername(), 
                 'pass' => $a->getPassword(), 
-                'email' => $a->getEmail(), 
+                'email' => $c->getEmail(), 
                 'package' => $p->getCustomValue('packageid'), 
                 'inode' => $p->getCustomValue('inode'), 
                 'limit_nproc' => $p->getCustomValue('limit_nproc'), 
